@@ -21,12 +21,20 @@ export default function Dashboard() {
             <h1 className="text-3xl font-bold text-gray-900">BigBrother</h1>
             <p className="text-gray-600 mt-1">Productivity Accountability Tracker</p>
           </div>
-          <button
-            onClick={() => setIsCreateModalOpen(true)}
-            className="btn btn-primary"
-          >
-            + Create Task
-          </button>
+          <div className="flex gap-3">
+            <button
+              onClick={() => navigate('/history')}
+              className="btn btn-secondary"
+            >
+              📋 Task History
+            </button>
+            <button
+              onClick={() => setIsCreateModalOpen(true)}
+              className="btn btn-primary"
+            >
+              + Create Task
+            </button>
+          </div>
         </div>
 
         {loading ? (

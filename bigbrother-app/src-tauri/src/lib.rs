@@ -1,8 +1,10 @@
 mod database;
 mod commands;
+mod recording;
 
-use commands::{tasks, recording, verification, settings};
+use commands::{tasks, recording as recording_commands, verification, settings};
 use std::sync::Arc;
+use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -15,7 +17,7 @@ pub fn run() {
             database::init_database(app.handle())?;
 
             // Initialize recording state
-            let recording_state = Arc::new(recording::RecordingState::new());
+            let recording_state = Arc::new(recording_commands::RecordingState::new());
             app.manage(recording_state);
 
             Ok(())
@@ -28,13 +30,16 @@ pub fn run() {
             tasks::update_task,
             tasks::delete_task,
             tasks::get_pending_tasks,
+            tasks::get_completed_tasks,
             // Recording commands
-            recording::start_recording,
-            recording::pause_recording,
-            recording::resume_recording,
-            recording::stop_recording,
-            recording::get_recording_status,
-            recording::update_recording_duration,
+            recording_commands::start_recording,
+            recording_commands::pause_recording,
+            recording_commands::resume_recording,
+            recording_commands::stop_recording,
+            recording_commands::get_recording_status,
+            recording_commands::update_recording_duration,
+            recording_commands::enumerate_displays,
+            recording_commands::enumerate_webcams,
             // Verification commands
             verification::verify_task_with_claude,
             verification::get_verification_status,

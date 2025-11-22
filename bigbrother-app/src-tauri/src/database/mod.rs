@@ -2,8 +2,7 @@ pub mod schema;
 pub mod models;
 
 use rusqlite::{Connection, Result};
-use std::path::PathBuf;
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 
 pub fn init_database(app: &AppHandle) -> Result<Connection> {
     let app_dir = app.path().app_data_dir()

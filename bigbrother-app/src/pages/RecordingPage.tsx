@@ -65,27 +65,33 @@ export default function RecordingPage() {
       if (!confirmed) return;
     }
 
-    const videoPath = await stopRecording();
-
-    // Start AI verification
-    setIsVerifying(true);
     try {
-      const result = await verificationApi.verify(parseInt(taskId!));
-      setIsVerifying(false);
-      setVerificationComplete(true);
+      const videoPath = await stopRecording();
 
-      // Show result
-      alert(
-        result.verified
-          ? `✅ Task Verified!\n\nConfidence: ${result.confidence}%\nTime on task: ${result.time_on_task_minutes.toFixed(1)} minutes\n\n${result.explanation}`
-          : `❌ Task Not Completed\n\nConfidence: ${result.confidence}%\nTime on task: ${result.time_on_task_minutes.toFixed(1)} minutes\n\n${result.explanation}\n\nIssues:\n${result.issues.join('\n')}`
-      );
+      // Start AI verification
+      setIsVerifying(true);
+      try {
+        const result = await verificationApi.verify(parseInt(taskId!));
+        setIsVerifying(false);
+        setVerificationComplete(true);
 
-      // Navigate back to dashboard
-      navigate('/');
+        // Show result
+        alert(
+          result.verified
+            ? `✅ Task Verified!\n\nConfidence: ${result.confidence}%\nTime on task: ${result.time_on_task_minutes.toFixed(1)} minutes\n\n${result.explanation}`
+            : `❌ Task Not Completed\n\nConfidence: ${result.confidence}%\nTime on task: ${result.time_on_task_minutes.toFixed(1)} minutes\n\n${result.explanation}\n\nIssues:\n${result.issues.join('\n')}`
+        );
+
+        // Navigate back to dashboard
+        navigate('/');
+      } catch (error) {
+        setIsVerifying(false);
+        alert(`Verification failed: ${error}`);
+        navigate('/');
+      }
     } catch (error) {
-      setIsVerifying(false);
-      alert(`Verification failed: ${error}`);
+      alert(`Failed to stop recording: ${error}`);
+      // Still navigate away even if stop failed
       navigate('/');
     }
   };

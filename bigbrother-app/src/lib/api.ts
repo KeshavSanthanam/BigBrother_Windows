@@ -12,6 +12,9 @@ export const taskApi = {
   getPending: (): Promise<Task[]> =>
     invoke('get_pending_tasks'),
 
+  getCompleted: (): Promise<Task[]> =>
+    invoke('get_completed_tasks'),
+
   get: (id: number): Promise<Task> =>
     invoke('get_task', { id }),
 
@@ -41,6 +44,12 @@ export const recordingApi = {
 
   updateDuration: (duration: number): Promise<void> =>
     invoke('update_recording_duration', { duration }),
+
+  enumerateDisplays: (): Promise<any[]> =>
+    invoke('enumerate_displays'),
+
+  enumerateWebcams: (): Promise<any[]> =>
+    invoke('enumerate_webcams'),
 };
 
 // Verification APIs

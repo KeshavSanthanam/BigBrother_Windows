@@ -1,6 +1,5 @@
 use crate::database::{get_connection, models::Task};
-use tauri::{AppHandle, State};
-use std::sync::Mutex;
+use tauri::AppHandle;
 
 #[tauri::command]
 pub async fn create_task(
@@ -135,6 +134,41 @@ pub async fn get_pending_tasks(app: AppHandle) -> Result<Vec<Task>, String> {
              FROM tasks
              WHERE status = 'pending'
              ORDER BY due_date ASC",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let tasks = stmt
+        .query_map([], |row| {
+            Ok(Task {
+                id: Some(row.get(0)?),
+                user_id: row.get(1)?,
+                title: row.get(2)?,
+                description: row.get(3)?,
+                due_date: row.get(4)?,
+                min_duration: row.get(5)?,
+                status: row.get(6)?,
+                video_path: row.get(7)?,
+                created_at: row.get(8)?,
+                updated_at: row.get(9)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<Task>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    Ok(tasks)
+}
+
+#[tauri::command]
+pub async fn get_completed_tasks(app: AppHandle) -> Result<Vec<Task>, String> {
+    let conn = get_connection(&app).map_err(|e| e.to_string())?;
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, user_id, title, description, due_date, min_duration, status, video_path, created_at, updated_at
+             FROM tasks
+             WHERE status IN ('completed', 'failed')
+             ORDER BY updated_at DESC",
         )
         .map_err(|e| e.to_string())?;
 

@@ -1,43 +1,47 @@
-use crate::database::{get_connection, models::{VerificationResult, TimelineEntry, CostEstimate, Verification}};
+use crate::database::{get_connection, models::{VerificationResult, CostEstimate, Verification}};
 use tauri::AppHandle;
 use serde_json::json;
-use std::path::Path;
+use rusqlite::OptionalExtension;
 
 #[tauri::command]
 pub async fn verify_task_with_claude(
     app: AppHandle,
     task_id: i64,
 ) -> Result<VerificationResult, String> {
-    // Get task details
-    let conn = get_connection(&app).map_err(|e| e.to_string())?;
+    // Get task details and API key first, then drop connection before async call
+    let (title, description, min_duration, video_path, api_key) = {
+        let conn = get_connection(&app).map_err(|e| e.to_string())?;
 
-    let mut stmt = conn
-        .prepare("SELECT title, description, min_duration, video_path FROM tasks WHERE id = ?1")
-        .map_err(|e| e.to_string())?;
+        let mut stmt = conn
+            .prepare("SELECT title, description, min_duration, video_path FROM tasks WHERE id = ?1")
+            .map_err(|e| e.to_string())?;
 
-    let (title, description, min_duration, video_path): (String, Option<String>, i64, Option<String>) = stmt
-        .query_row([task_id], |row| {
-            Ok((
-                row.get(0)?,
-                row.get(1)?,
-                row.get(2)?,
-                row.get(3)?,
-            ))
-        })
-        .map_err(|e| e.to_string())?;
+        let (title, description, min_duration, video_path): (String, Option<String>, i64, Option<String>) = stmt
+            .query_row([task_id], |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                ))
+            })
+            .map_err(|e| e.to_string())?;
 
-    let video_path = video_path.ok_or("No video found for this task")?;
+        let video_path = video_path.ok_or("No video found for this task")?;
 
-    // Get Claude API key
-    let mut stmt = conn
-        .prepare("SELECT claude_api_key FROM users WHERE id = 1")
-        .map_err(|e| e.to_string())?;
+        // Get Claude API key
+        let mut stmt = conn
+            .prepare("SELECT claude_api_key FROM users WHERE id = 1")
+            .map_err(|e| e.to_string())?;
 
-    let api_key: Option<String> = stmt
-        .query_row([], |row| row.get(0))
-        .map_err(|e| e.to_string())?;
+        let api_key: Option<String> = stmt
+            .query_row([], |row| row.get(0))
+            .map_err(|e| e.to_string())?;
 
-    let api_key = api_key.ok_or("Claude API key not set. Please configure it in settings.")?;
+        let api_key = api_key.ok_or("Claude API key not set. Please configure it in settings.")?;
+
+        (title, description, min_duration, video_path, api_key)
+    }; // conn is dropped here
 
     // Extract frames from video
     let frames = extract_video_frames(app.clone(), video_path.clone(), 10).await?;
@@ -59,6 +63,7 @@ pub async fn verify_task_with_claude(
     // Store verification result in database
     let verification_json = serde_json::to_string(&result).map_err(|e| e.to_string())?;
 
+    let conn = get_connection(&app).map_err(|e| e.to_string())?;
     conn.execute(
         "INSERT INTO task_verifications (task_id, verified, ai_verification, ai_confidence, time_on_task, explanation)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
@@ -128,7 +133,7 @@ async fn send_to_claude_api(
     })];
 
     // Add frames (limit to avoid token limits)
-    for (i, frame_base64) in frames.iter().take(20).enumerate() {
+    for frame_base64 in frames.iter().take(20) {
         content_parts.push(json!({
             "type": "image",
             "source": {
@@ -182,7 +187,7 @@ async fn send_to_claude_api(
 
 #[tauri::command]
 pub async fn extract_video_frames(
-    app: AppHandle,
+    _app: AppHandle,
     video_path: String,
     interval_seconds: u32,
 ) -> Result<Vec<String>, String> {

@@ -53,7 +53,7 @@ pub struct TimelineEntry {
     pub activity: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct RecordingStatus {
     pub is_recording: bool,
     pub is_paused: bool,
