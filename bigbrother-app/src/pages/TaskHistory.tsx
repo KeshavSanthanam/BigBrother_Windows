@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { invoke } from '@tauri-apps/api/core';
 import { useTaskStore } from '../store/taskStore';
 import type { Task } from '../lib/types';
 import { formatDateTime, formatDuration } from '../lib/utils';
 import { verificationApi } from '../lib/api';
+import ThemeToggle from '../components/ThemeToggle';
 
 export default function TaskHistory() {
   const navigate = useNavigate();
@@ -15,7 +17,13 @@ export default function TaskHistory() {
     fetchTasks();
   }, [fetchTasks]);
 
-  const completedTasks = tasks.filter(t => t.status === 'completed' || t.status === 'failed');
+  const completedTasks = tasks
+    .filter(t => t.status === 'completed' || t.status === 'failed')
+    .sort((a, b) => {
+      const dateA = new Date(a.updated_at || a.created_at || 0).getTime();
+      const dateB = new Date(b.updated_at || b.created_at || 0).getTime();
+      return dateB - dateA; // Most recent first
+    });
 
   const handleViewDetails = async (task: Task) => {
     setSelectedTask(task);
@@ -26,19 +34,20 @@ export default function TaskHistory() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex justify-between items-center mb-8">
           <div>
             <button
               onClick={() => navigate('/')}
-              className="text-primary hover:underline mb-4"
+              className="text-primary dark:text-purple hover:underline mb-4"
             >
               ← Back to Dashboard
             </button>
-            <h1 className="text-3xl font-bold text-gray-900">Task History</h1>
-            <p className="text-gray-600 mt-1">View your completed and failed tasks</p>
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Task History</h1>
+            <p className="text-gray-600 dark:text-gray-300 mt-1">View your completed and failed tasks</p>
           </div>
+          <ThemeToggle />
         </div>
 
         {completedTasks.length === 0 ? (
@@ -62,22 +71,22 @@ export default function TaskHistory() {
                 <div className="flex justify-between items-start">
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-2">
-                      <h3 className="text-xl font-semibold text-gray-900">{task.title}</h3>
+                      <h3 className="text-xl font-semibold text-gray-900 dark:text-white">{task.title}</h3>
                       <span className={`px-3 py-1 rounded-full text-sm font-medium ${task.status === 'completed'
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-red-100 text-red-800'
+                        ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200'
+                        : 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200'
                         }`}>
                         {task.status === 'completed' ? '✓ Verified' : '✗ Failed'}
                       </span>
                     </div>
                     {task.description && (
-                      <p className="text-gray-600 text-sm mb-3">{task.description}</p>
+                      <p className="text-gray-600 dark:text-gray-400 text-sm mb-3">{task.description}</p>
                     )}
-                    <div className="flex gap-6 text-sm text-gray-500">
+                    <div className="flex gap-6 text-sm text-gray-500 dark:text-gray-400">
                       <span>Completed: {formatDateTime(task.updated_at || '')}</span>
                       <span>Required: {formatDuration(task.min_duration)}</span>
                       {task.video_path && (
-                        <span className="text-primary">📹 Video available</span>
+                        <span className="text-primary dark:text-purple">📹 Video available</span>
                       )}
                     </div>
                   </div>
@@ -106,56 +115,59 @@ export default function TaskHistory() {
             }}
           >
             <div
-              className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto"
+              className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex justify-between items-start mb-4">
-                <h2 className="text-2xl font-bold">{selectedTask.title}</h2>
+                <h2 className="text-2xl font-bold dark:text-white">{selectedTask.title}</h2>
                 <button
                   onClick={() => {
                     setSelectedTask(null);
                     setVerification(null);
                   }}
-                  className="text-gray-400 hover:text-gray-600 text-2xl"
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-2xl"
                 >
                   ×
                 </button>
               </div>
 
               {selectedTask.description && (
-                <p className="text-gray-600 mb-4">{selectedTask.description}</p>
+                <p className="text-gray-600 dark:text-gray-400 mb-4">{selectedTask.description}</p>
               )}
 
               <div className="space-y-3 mb-6">
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">Status:</span>
-                  <span className={`font-medium ${selectedTask.status === 'completed' ? 'text-green-600' : 'text-red-600'
+                  <span className="text-gray-500 dark:text-gray-400">Status:</span>
+                  <span className={`font-medium ${selectedTask.status === 'completed' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
                     }`}>
                     {selectedTask.status === 'completed' ? 'Verified Complete' : 'Failed Verification'}
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">Due Date:</span>
-                  <span>{formatDateTime(selectedTask.due_date)}</span>
+                  <span className="text-gray-500 dark:text-gray-400">Due Date:</span>
+                  <span className="dark:text-gray-300">{formatDateTime(selectedTask.due_date)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">Completed:</span>
-                  <span>{formatDateTime(selectedTask.updated_at || '')}</span>
+                  <span className="text-gray-500 dark:text-gray-400">Completed:</span>
+                  <span className="dark:text-gray-300">{formatDateTime(selectedTask.updated_at || '')}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">Required Duration:</span>
-                  <span>{formatDuration(selectedTask.min_duration)}</span>
+                  <span className="text-gray-500 dark:text-gray-400">Required Duration:</span>
+                  <span className="dark:text-gray-300">{formatDuration(selectedTask.min_duration)}</span>
                 </div>
                 {selectedTask.video_path && (
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-500">Video:  </span>
+                    <span className="text-gray-500 dark:text-gray-400">Video:  </span>
                     <button
-                      onClick={() => {
-                        // Open video in default player
-                        const { open } = require('@tauri-apps/plugin-opener');
-                        open(selectedTask.video_path!);
+                      onClick={async () => {
+                        try {
+                          await invoke('open_video_file', { path: selectedTask.video_path });
+                        } catch (error) {
+                          console.error('Failed to open video', error);
+                          alert('Unable to open video recording.');
+                        }
                       }}
-                      className="text-primary hover:underline cursor-pointer text-left break-all"
+                      className="text-primary dark:text-purple hover:underline cursor-pointer text-left break-all"
                     >
                       {selectedTask.video_path}
                     </button>

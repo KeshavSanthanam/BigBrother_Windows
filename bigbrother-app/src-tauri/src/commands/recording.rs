@@ -279,7 +279,7 @@ pub async fn stop_recording(
 
         conn.execute(
             "UPDATE tasks
-             SET status = 'completed', video_path = ?1, updated_at = datetime('now')
+             SET status = 'completed', video_path = ?1, updated_at = datetime('now', 'localtime')
              WHERE id = ?2",
             rusqlite::params![&recording.file_path, task_id],
         )

@@ -22,8 +22,24 @@ export default function CreateTaskModal({ isOpen, onClose }: CreateTaskModalProp
       return;
     }
 
+    // Validate due date/time is not in the past
     const dueDateTimeStr = `${dueDate}T${dueTime}:00`;
-    const minDurationSeconds = parseInt(minDuration) * 60;
+    const dueDateTime = new Date(dueDateTimeStr);
+    const now = new Date();
+
+    if (dueDateTime <= now) {
+      alert('Due date and time must be in the future');
+      return;
+    }
+
+    // Validate duration is not over 4 hours (240 minutes)
+    const durationMinutes = parseInt(minDuration);
+    if (durationMinutes > 240) {
+      alert('Recording duration cannot exceed 4 hours (240 minutes)');
+      return;
+    }
+
+    const minDurationSeconds = durationMinutes * 60;
 
     try {
       await createTask(title, description || null, dueDateTimeStr, minDurationSeconds);
@@ -42,8 +58,8 @@ export default function CreateTaskModal({ isOpen, onClose }: CreateTaskModalProp
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-        <h2 className="text-2xl font-bold mb-4">Create New Task</h2>
+      <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4">
+        <h2 className="text-2xl font-bold dark:text-white mb-4">Create New Task</h2>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="label">Title *</label>
@@ -99,9 +115,11 @@ export default function CreateTaskModal({ isOpen, onClose }: CreateTaskModalProp
               onChange={(e) => setMinDuration(e.target.value)}
               className="input"
               min="1"
+              max="240"
               placeholder="30"
               required
             />
+            <p className="text-xs text-gray-500 mt-1">Maximum 4 hours (240 minutes)</p>
           </div>
 
           <div className="flex gap-3 mt-6">

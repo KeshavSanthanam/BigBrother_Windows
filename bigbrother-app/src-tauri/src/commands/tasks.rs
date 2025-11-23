@@ -97,7 +97,7 @@ pub async fn update_task(app: AppHandle, id: i64, task: Task) -> Result<Task, St
 
     conn.execute(
         "UPDATE tasks
-         SET title = ?1, description = ?2, due_date = ?3, min_duration = ?4, status = ?5, video_path = ?6, updated_at = datetime('now')
+         SET title = ?1, description = ?2, due_date = ?3, min_duration = ?4, status = ?5, video_path = ?6, updated_at = datetime('now', 'localtime')
          WHERE id = ?7",
         rusqlite::params![
             task.title,

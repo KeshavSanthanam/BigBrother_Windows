@@ -44,6 +44,9 @@ impl VideoCombiner {
         // Add filter complex
         cmd.arg("-filter_complex").arg(&filter_complex);
 
+        // Map the video output from filter complex
+        cmd.arg("-map").arg("[v]");
+
         // Add output options
         cmd.arg("-c:v")
             .arg("libx264")
@@ -57,6 +60,7 @@ impl VideoCombiner {
 
         println!("Running FFmpeg command...");
         println!("Grid: {}x{}", rows, cols);
+        println!("Filter complex: {}", filter_complex);
 
         let output = cmd.output()
             .map_err(|e| format!("Failed to run FFmpeg: {}", e))?;
@@ -91,10 +95,32 @@ impl VideoCombiner {
         let num_videos = self.input_files.len();
 
         if num_videos == 1 {
-            // Single video, no grid needed
-            return format!("[0:v]scale=1920:1080[v]");
+            // Single video, no grid needed - just scale to output size
+            return format!("[0:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2[v]");
         }
 
+        // For 2 videos (1 monitor + 1 webcam), place side by side
+        if num_videos == 2 {
+            let cell_width = 1920 / 2;
+            let cell_height = 1080;
+
+            let mut filter = String::new();
+
+            // Scale both videos to half width
+            for i in 0..2 {
+                filter.push_str(&format!(
+                    "[{}:v]scale={}:{}:force_original_aspect_ratio=decrease,pad={}:{}:(ow-iw)/2:(oh-ih)/2,setsar=1[v{}];",
+                    i, cell_width, cell_height, cell_width, cell_height, i
+                ));
+            }
+
+            // Place side by side
+            filter.push_str("[v0][v1]hstack=inputs=2[v]");
+
+            return filter;
+        }
+
+        // For 3+ videos, use a proper grid
         let cell_width = 1920 / cols;
         let cell_height = 1080 / rows;
 
@@ -108,7 +134,6 @@ impl VideoCombiner {
             ));
         }
 
-        // Create grid layout using xstack
         // Build xstack inputs
         let mut xstack_inputs = String::new();
         for i in 0..num_videos {
@@ -131,7 +156,6 @@ impl VideoCombiner {
             }
         }
 
-        // Add xstack filter
         filter.push_str(&format!(
             "{}xstack=inputs={}:layout={}[v]",
             xstack_inputs, num_videos, layout
@@ -179,6 +203,8 @@ impl VideoCombiner {
 
         cmd.arg("-filter_complex")
             .arg(&filter)
+            .arg("-map")
+            .arg("[v]")
             .arg("-c:v")
             .arg("libx264")
             .arg("-preset")

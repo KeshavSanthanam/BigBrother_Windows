@@ -16,6 +16,7 @@ export default function RecordingPage() {
   const [task, setTask] = useState<Task | null>(null);
   const [isVerifying, setIsVerifying] = useState(false);
   const [verificationComplete, setVerificationComplete] = useState(false);
+  const [isStopping, setIsStopping] = useState(false);
 
   useEffect(() => {
     if (taskId) {
@@ -29,7 +30,7 @@ export default function RecordingPage() {
   useEffect(() => {
     // Update duration every second when recording
     let interval: number | undefined;
-    if (status.is_recording && !status.is_paused) {
+    if (status.is_recording && !status.is_paused && !isStopping) {
       interval = window.setInterval(() => {
         updateDuration(status.duration + 1);
       }, 1000);
@@ -37,7 +38,7 @@ export default function RecordingPage() {
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [status.is_recording, status.is_paused, status.duration, updateDuration]);
+  }, [status.is_recording, status.is_paused, status.duration, updateDuration, isStopping]);
 
   const handleStart = async () => {
     if (taskId) {
@@ -64,6 +65,9 @@ export default function RecordingPage() {
       );
       if (!confirmed) return;
     }
+
+    // Immediately stop the duration timer
+    setIsStopping(true);
 
     try {
       const videoPath = await stopRecording();

@@ -120,15 +120,16 @@ impl ScreenRecorder {
                 let temp_file = format!("{}_display_{}.mp4", self.output_path, idx);
 
                 // Use FFmpeg with gdigrab (Windows screen capture)
-                // Add -y to overwrite files, and use stdin for clean shutdown
+                // Reduced framerate to 5fps for minimal performance impact while maintaining AI analysis quality
                 let child = Command::new("ffmpeg")
                     .args(&[
                         "-y",  // Overwrite output files
                         "-f", "gdigrab",
-                        "-framerate", "30",
+                        "-framerate", "5",  // Reduced from 30fps to 5fps for better performance
                         "-i", "desktop",
                         "-c:v", "libx264",
-                        "-preset", "ultrafast",
+                        "-preset", "veryfast",  // Changed from ultrafast for better compression
+                        "-crf", "28",  // Higher CRF for smaller file size (still acceptable quality)
                         "-pix_fmt", "yuv420p",
                         &temp_file,
                     ])
@@ -143,25 +144,44 @@ impl ScreenRecorder {
             // Record webcam if available
             if let Some(webcam) = &self.webcam {
                 let temp_file = format!("{}_webcam.mp4", self.output_path);
+                println!("Attempting to record webcam: {}", webcam.name);
+
+                // Try with webcam name first, fallback to index if it fails
+                let webcam_input = if webcam.name == "Default Webcam" {
+                    "0".to_string()  // Use index for default
+                } else {
+                    format!("video={}", webcam.name)
+                };
 
                 let child = Command::new("ffmpeg")
                     .args(&[
                         "-y",  // Overwrite output files
                         "-f", "dshow",
                         "-video_size", "640x480",
-                        "-framerate", "30",
-                        "-i", &format!("video={}", webcam.name),
+                        "-framerate", "5",  // Reduced from 30fps to 5fps for better performance
+                        "-i", &webcam_input,
                         "-c:v", "libx264",
-                        "-preset", "ultrafast",
+                        "-preset", "veryfast",  // Changed from ultrafast for better compression
+                        "-crf", "28",  // Higher CRF for smaller file size
                         "-pix_fmt", "yuv420p",
                         &temp_file,
                     ])
                     .stdin(std::process::Stdio::piped())  // Enable stdin for 'q' command
-                    .spawn()
-                    .map_err(|e| format!("Failed to start webcam recording: {}", e))?;
+                    .stderr(std::process::Stdio::piped())  // Capture errors
+                    .spawn();
 
-                self.webcam_process = Some(child);
-                println!("Started recording webcam to {}", temp_file);
+                match child {
+                    Ok(child) => {
+                        self.webcam_process = Some(child);
+                        println!("Started recording webcam to {}", temp_file);
+                    }
+                    Err(e) => {
+                        eprintln!("Warning: Failed to start webcam recording: {}", e);
+                        eprintln!("Continuing without webcam...");
+                    }
+                }
+            } else {
+                println!("No webcam selected for recording");
             }
         }
 

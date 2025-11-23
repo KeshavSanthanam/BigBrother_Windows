@@ -81,12 +81,60 @@ pub async fn verify_task_with_claude(
     // Update task status based on verification
     let new_status = if result.verified { "completed" } else { "failed" };
     conn.execute(
-        "UPDATE tasks SET status = ?1, updated_at = datetime('now') WHERE id = ?2",
+        "UPDATE tasks SET status = ?1, updated_at = datetime('now', 'localtime') WHERE id = ?2",
         rusqlite::params![new_status, task_id],
     )
     .map_err(|e| e.to_string())?;
 
     Ok(result)
+}
+
+async fn get_available_models(
+    client: &reqwest::Client,
+    api_key: &str,
+) -> Result<Vec<String>, String> {
+    // Query the Anthropic API for available models
+    let response = client
+        .get("https://api.anthropic.com/v1/models")
+        .header("x-api-key", api_key)
+        .header("anthropic-version", "2023-06-01")
+        .send()
+        .await
+        .map_err(|e| format!("Failed to query models API: {}", e))?;
+
+    if !response.status().is_success() {
+        return Err(format!("Models API returned error: {}", response.status()));
+    }
+
+    let models_json: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse models response: {}", e))?;
+
+    // Extract model IDs from response
+    let mut available_models: Vec<String> = models_json["data"]
+        .as_array()
+        .ok_or("Invalid models response format")?
+        .iter()
+        .filter_map(|m| m["id"].as_str().map(|s| s.to_string()))
+        .filter(|id| {
+            // Prefer Sonnet models, but also include Opus as fallback
+            (id.contains("claude") && id.contains("sonnet")) ||
+            (id.contains("claude") && id.contains("opus"))
+        })
+        .collect();
+
+    // Sort by model name (descending) to get newest first
+    // Model names are like "claude-3-5-sonnet-20241022" so alphabetical sort works
+    available_models.sort_by(|a, b| b.cmp(a));
+
+    println!("Available Claude models: {:?}", available_models);
+
+    if available_models.is_empty() {
+        return Err("No suitable Claude models found".to_string());
+    }
+
+    Ok(available_models)
 }
 
 async fn send_to_claude_api(
@@ -144,45 +192,66 @@ async fn send_to_claude_api(
         }));
     }
 
-    let request_body = json!({
-        "model": "claude-3-5-sonnet-20241022",
-        "max_tokens": 2048,
-        "messages": [{
-            "role": "user",
-            "content": content_parts
-        }]
+    // Query API for available models, fallback to hardcoded list if that fails
+    let models_to_try = get_available_models(&client, api_key).await.unwrap_or_else(|e| {
+        eprintln!("Failed to query available models: {}. Using fallback list.", e);
+        vec![
+            "claude-3-5-sonnet-20241022".to_string(),  // Latest as of Oct 2024
+            "claude-3-5-sonnet-20240620".to_string(),  // June 2024
+            "claude-3-opus-20240229".to_string(),      // Fallback to Opus
+        ]
     });
 
-    let response = client
-        .post("https://api.anthropic.com/v1/messages")
-        .header("x-api-key", api_key)
-        .header("anthropic-version", "2023-06-01")
-        .header("content-type", "application/json")
-        .json(&request_body)
-        .send()
-        .await
-        .map_err(|e| format!("Failed to send request to Claude API: {}", e))?;
+    let mut last_error = String::new();
 
-    if !response.status().is_success() {
-        let error_text = response.text().await.unwrap_or_default();
-        return Err(format!("Claude API error: {}", error_text));
+    for model in &models_to_try {
+        let request_body = json!({
+            "model": model,
+            "max_tokens": 2048,
+            "messages": [{
+                "role": "user",
+                "content": content_parts.clone()
+            }]
+        });
+
+        let response = client
+            .post("https://api.anthropic.com/v1/messages")
+            .header("x-api-key", api_key)
+            .header("anthropic-version", "2023-06-01")
+            .header("content-type", "application/json")
+            .json(&request_body)
+            .send()
+            .await
+            .map_err(|e| format!("Failed to send request to Claude API: {}", e))?;
+
+        if response.status().is_success() {
+            // Model worked, continue with processing
+            let response_json: serde_json::Value = response
+                .json()
+                .await
+                .map_err(|e| format!("Failed to parse Claude API response: {}", e))?;
+
+            // Extract text content from Claude's response
+            let text_content = response_json["content"][0]["text"]
+                .as_str()
+                .ok_or("Failed to extract text from Claude response")?;
+
+            // Parse JSON from Claude's response
+            let verification: VerificationResult = serde_json::from_str(text_content)
+                .map_err(|e| format!("Failed to parse verification result: {}. Response: {}", e, text_content))?;
+
+            return Ok(verification);
+        } else {
+            // Model didn't work, save error and try next
+            let error_text = response.text().await.unwrap_or_default();
+            last_error = format!("Model {} failed: {}", model, error_text);
+            eprintln!("{}", last_error);
+            continue;
+        }
     }
 
-    let response_json: serde_json::Value = response
-        .json()
-        .await
-        .map_err(|e| format!("Failed to parse Claude API response: {}", e))?;
-
-    // Extract text content from Claude's response
-    let text_content = response_json["content"][0]["text"]
-        .as_str()
-        .ok_or("Failed to extract text from Claude response")?;
-
-    // Parse JSON from Claude's response
-    let verification: VerificationResult = serde_json::from_str(text_content)
-        .map_err(|e| format!("Failed to parse verification result: {}. Response: {}", e, text_content))?;
-
-    Ok(verification)
+    // If we got here, all models failed
+    Err(format!("All models failed. Last error: {}", last_error))
 }
 
 #[tauri::command]

@@ -2,7 +2,7 @@ mod database;
 mod commands;
 mod recording;
 
-use commands::{tasks, recording as recording_commands, verification, settings};
+use commands::{tasks, recording as recording_commands, verification, settings, utils};
 use std::sync::Arc;
 use tauri::Manager;
 
@@ -48,6 +48,8 @@ pub fn run() {
             // Settings commands
             settings::set_claude_api_key,
             settings::get_claude_api_key,
+            // Utility commands
+            utils::open_video_file,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
